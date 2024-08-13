@@ -1,0 +1,489 @@
+#+options: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline
+#+options: author:t broken-links:nil c:nil creator:nil
+#+options: d:(not "LOGBOOK") date:t e:t email:nil expand-links:t f:t
+#+options: inline:t num:t p:nil pri:nil prop:nil stat:t tags:t
+#+options: tasks:t tex:t timestamp:t title:t toc:t todo:t |:t
+#+title: Proyecto ICCD332 Arquitectura de Computadores
+#+date: 2024-08-14
+#+author: MOISÉS PINEDA
+#+author: FREDDY JIMENEZ
+#+email: moises.pineda@epn.edu.ec
+#+language: es
+#+select_tags: export
+#+exclude_tags: noexport
+#+creator: Emacs 27.1 (Org mode 9.7.5)
+#+cite_export:
+* City Weather APP
+Este es el proyecto de fin de semestre en donde se pretende demostrar
+las destrezas obtenidas durante el transcurso de la asignatura de
+**Arquitectura de Computadores**.
+
+1. Conocimientos de sistema operativo Linux
+2. Conocimientos de Emacs/Jupyter
+3. Configuración de Entorno para Data Science con Mamba/Anaconda
+4. Literate Programming
+ 
+** Estructura del proyecto
+Se recomienda que el proyecto se cree en el /home/ del sistema
+operativo i.e. /home/<user>/. Allí se creará la carpeta /CityWeather/
+#+begin_src shell :results output :exports both
+#cd ..
+#cd ..
+pwd
+#+end_src
+
+#+RESULTS:
+: /home/santiago/LojaWeather/weather_site/content
+
+El proyecto ha de tener los siguientes archivos y
+subdirectorios. Adaptar los nombres de los archivos según las ciudades
+específicas del grupo.
+
+#+begin_src shell :results output :exports results
+cd ..
+cd ..
+tree
+#+end_src
+
+#+RESULTS:
+#+begin_example
+.
+├── CityTemperatureAnalysis.ipynb
+├── clima-loja-hoy-etl.csv
+├── clima-loja-hoy.csv
+├── get_weather.py
+├── get_weather.sh
+├── output.log
+└── weather_site
+    └── content
+        ├── #index.org#
+        ├── images
+        │   └── temperature.pdf
+        └── index.org
+
+4 directories, 9 files
+#+end_example
+
+Puede usar Emacs para la creación de la estructura de su proyecto
+usando comandos desde el bloque de shell. Recuerde ejecutar el bloque
+con ~C-c C-c~. Para insertar un bloque nuevo utilice ~C-c C-,~ o ~M-x
+org-insert-structure-template~. Seleccione la opción /s/ para src y
+adapte el bloque según su código tenga un comandos de shell, código de
+Python o de Java. En este documento ~.org~ dispone de varios ejemplos
+funcionales para escribir y presentar el código.
+
+#+begin_src shell :results output :exports both
+mkdir -p /home/santiago/LojaWeather/weather_site/public
+cd ..
+tree
+#+end_src
+
+#+RESULTS:
+: .
+: ├── content
+: │   ├── #index.org#
+: │   ├── images
+: │   │   └── temperature.pdf
+: │   └── index.org
+: └── public
+: 
+: 4 directories, 3 files
+
+#+begin_src shell :results output :exports both
+mkdir -p /home/santiago/LojaWeather/weather_site/public/images
+cd ..
+tree
+#+end_src
+
+#+RESULTS:
+#+begin_example
+.
+├── content
+│   ├── #index.org#
+│   ├── images
+│   │   └── temperature.pdf
+│   └── index.org
+└── public
+    └── images
+
+5 directories, 3 files
+#+end_example
+
+** Formulación del Problema
+Se desea realizar un registro climatológico de una ciudad
+$\mathcal{C}$. Para esto, escriba un script de Python/Java que permita
+obtener datos climatológicos desde el API de [[https://openweathermap.org/current#one][openweathermap]]. El API
+hace uso de los valores de latitud $x$ y longitud $y$ de la ciudad
+$\mathcal{C}$ para devolver los valores actuales a un tiempo $t$.
+
+Los resultados obtenidos de la consulta al API se escriben en un
+archivo /clima-<ciudad>-hoy.csv/. Cada ejecución del script debe
+almacenar nuevos datos en el archivo. Utilice *crontab* y sus
+conocimientos de Linux y Programación para obtener datos del API de
+/openweathermap/ con una periodicidad de 15 minutos mediante la
+ejecución de un archivo ejecutable denominado
+/get-weather.sh/. Obtenga al menos 50 datos. Verifique los
+resultados. Todas las operaciones se realizan en Linux o en el
+WSL. Las etapas del problema se subdividen en:
+
+    1. Conformar los grupos de 2 estudiantes y definir la ciudad
+       objeto de estudio.
+    2.  Crear su API gratuito en [[https://openweathermap.org/current#one][openweathermap]]
+    3. Escribir un script en Python/Java que realice la consulta al
+       API y escriba los resultados en /clima-<ciudad>-hoy.csv/. El
+       archivo ha de contener toda la información que se obtiene del
+       API en columnas. Se debe observar que los datos sobre lluvia
+       (rain) y nieve (snow) se dan a veces si existe el fenómeno.
+    3. Desarrollar un ejecutable /get-weather.sh/ para ejecutar el
+       programa Python/Java.[fn:1]
+       #+begin_src python :session :results output exports both
+import requests
+import csv
+from datetime import datetime
+
+API_KEY = 'b97591668f40c5e0dd5bfd519f558171'
+# Coordenadas de Quito
+LAT = -3.9931
+LON = -79.2036
+# URL del API
+URL = f'http://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric'
+
+def format_row(timestamp, temperature, humidity, description):
+    # Define el formato de la fila con separación por '|'
+    return f"{timestamp:<24} | {temperature:<15} | {humidity:<11} | {description:<20}"
+
+def save_to_csv(header, row, file_path):
+    try:
+        with open(file_path, 'a', newline='') as file:
+            writer = csv.writer(file)
+            # Escribe la cabecera solo si el archivo está vacío
+            if file.tell() == 0:
+                writer.writerow(header)
+            writer.writerow(row)
+    except IOError as e:
+        print(f"Error al guardar el archivo CSV: {e}")
+
+try:
+    # Realiza la solicitud al API
+    response = requests.get(URL)
+    response.raise_for_status()  # Lanza un error si la respuesta no es 200 OK
+
+    # Convierte la respuesta en formato JSON
+    data = response.json()
+
+    # Verifica si la respuesta contiene un código de error
+    if data.get('cod') != 200:
+        raise Exception(f"Error en la solicitud: {data.get('message')}")
+
+    # Extrae la información que necesitas
+    temperature = round(data['main']['temp'], 2)  # Redondea la temperatura a 2 decimales
+    humidity = data['main']['humidity']
+    description = data['weather'][0]['description'].capitalize()  # Capitaliza la descripción
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Formatea los datos
+    formatted_temperature = f"{temperature:.2f} °C"
+    formatted_humidity = f"{humidity} %"
+
+    # Define el encabezado y la fila
+    header = ['Timestamp', 'Temperature (°C)', 'Humidity (%)', 'Description']
+    row = [timestamp, formatted_temperature, formatted_humidity, description]
+
+    # Guarda los datos en el archivo CSV
+    file_path = '/home/santiago/LojaWeather/clima-loja-hoy.csv'  # Cambia a una ruta donde tengas permisos
+    save_to_csv(header, row, file_path)
+
+    # Imprime el mensaje de éxito en la consola
+    print("Solicitud al API completada exitosamente.")
+
+except requests.exceptions.RequestException as e:
+    print(f"Error en la solicitud al API: {e}")
+except Exception as e:
+    print(f"Error: {e}")
+       #+end_src
+
+       #+RESULTS:
+       : Solicitud al API completada exitosamente.
+
+    4. Configurar Crontab para la adquisición de datos. Escriba el
+       comando configurado. Respalde la ejecución de crontab en un
+       archivo output.log
+    5. Realizar la presentación del Trabajo utilizando la generación
+       del sitio web por medio de Emacs. Para esto es necesario crear
+       la carpeta **weather-site** dentro del proyecto. Puede ajustar el
+       /look and feel/ según sus preferencias. El servidor a usar es
+       el **simple-httpd** integrado en Emacs que debe ser instalado:
+       - Usando comandos Emacs: ~M-x package-install~ presionamos
+         enter (i.e. RET) y escribimos el nombre del paquete:
+         simple-httpd
+       - Configurando el archivo init.el
+
+       #+begin_src elisp
+         (use-package simple-httpd
+            :ensure t)
+       #+end_src
+
+       #+RESULTS:
+
+       Instrucciones de sobre la creación del sitio web se tiene en el
+       vídeo de instrucciones y en el archivo [[https://github.com/LeninGF/EPN-Lectures/blob/main/iccd332ArqComp-2024-A/Tutoriales/Org-Website/Org-Website.org][Org-Website.org]] en el
+       GitHub del curso
+
+    6. Su código debe estar respaldado en GitHub/BitBucket, la
+       dirección será remitida en la contestación de la tarea
+** Descripción del código
+En esta sección se debe detallar segmentos importantes del código
+desarrollado así como la **estrategia de solución** adoptada por el
+grupo para resolver el problema. Divida su código en unidades
+funcionales para facilitar su presentación y exposición.
+
+Lectura del API
+#+begin_src python :session :results output exports both
+import requests
+import csv
+from datetime import datetime
+
+API_KEY = 'b97591668f40c5e0dd5bfd519f558171'
+LAT = -3.9931
+LON = -79.2036
+URL = f'http://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric'
+
+try:
+    response = requests.get(URL)
+    response.raise_for_status()  # Lanza un error si la respuesta no es 200 OK
+    data = response.json()  # Convierte la respuesta en formato JSON
+except requests.exceptions.RequestException as e:
+    print(f"Error en la solicitud al API: {e}")
+#+end_src
+
+Convertir /Json/ a /Diccionario/ de Python
+#+begin_src python :session :results output exports both
+    if data.get('cod') != 200:
+        raise Exception(f"Error en la solicitud: {data.get('message')}")
+    
+    temperature = round(data['main']['temp'], 2)
+    humidity = data['main']['humidity']
+    description = data['weather'][0]['description'].capitalize()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    formatted_temperature = f"{temperature:.2f} °C"
+    formatted_humidity = f"{humidity} %"
+#+end_src
+
+Guardar el archivo csv
+#+begin_src python :session :results output exports both
+def format_row(timestamp, temperature, humidity, description):
+    return f"{timestamp} | {temperature} | {humidity} | {description}"
+
+def save_to_csv(header, row, file_path):
+    try:
+        with open(file_path, 'a') as file:
+            if file.tell() == 0:
+                file.write(' | '.join(header) + '\n')
+            file.write(row + '\n')
+    except IOError as e:
+        print(f"Error al guardar el archivo CSV: {e}")
+
+header = ['Timestamp', 'Temperature (°C)', 'Humidity (%)', 'Description']
+row = format_row(timestamp, formatted_temperature, formatted_humidity, description)
+
+file_path = '/home/santiago/LojaWeather/clima-loja-hoy.csv'
+save_to_csv(header, row, file_path)
+#+end_src
+
+
+** Script ejecutable sh
+Se coloca el contenido del script ejecutable. Recuerde que se debe
+utilizar el entorno de **anaconda/mamba** denominado **iccd332** para
+la ejecución de Python; independientemente de que tenga una
+instalación nativa de Python
+
+En el caso de los shell script se puede usar `which sh` para conocer
+la ubicación del ejecutable
+#+begin_src shell :results output :exports both
+which sh
+#+end_src
+
+#+RESULTS:
+: /usr/bin/sh
+
+De igual manera se requiere localizar el entorno de mamba *iccd332*
+que será utilizado
+
+#+begin_src shell :results output :exports both
+which mamba
+#+end_src
+
+#+RESULTS:
+: /home/santiago/miniforge3/bin/mamba
+
+Con esto el archivo ejecutable a de tener (adapte el código según las
+condiciones de su máquina):
+
+#+begin_src shell :results output :exports both
+#!/usr/bin/sh
+source /home/santiago/miniforge3/etc/profile.d/conda.sh
+eval "$(mamba shell.bash hook)"
+conda activate iccd332
+python /home/santiago/LojaWeather/get_weather.py
+#+end_src
+
+#+RESULTS:
+: Solicitud al API completada exitosamente.
+
+Finalmente convierta en ejecutable como se explicó en clases y laboratorio
+#+begin_src shell :results output :exports both
+#!/usr/bin/sh
+chmod +x /home/santiago/LojaWeather/get-weather.sh
+#+end_src
+
+** Configuración de Crontab
+Se indica la configuración realizada en crontab para la adquisición de datos
+
+#+begin_src shell
+*/5 * * * * /home/santiago/LojaWeather/get_weather.sh >> /home/santiago/LojaWeather/output.log 2>&1
+#+end_src
+
+- Recuerde remplazar <City> por el nombre de la ciudad que analice
+- Recuerde ajustar el tiempo para potenciar tomar datos nuevos
+- Recuerde que ~2>&1~ permite guardar en ~output.log~ tanto la salida
+  del programa como los errores en la ejecución.
+* Presentación de resultados
+Para la pressentación de resultados se utilizan las librerías de Python:
+- matplotlib
+- pandas
+
+Alternativamente como pudo estudiar en el Jupyter Notebook
+[[https://github.com/LeninGF/EPN-Lectures/blob/main/iccd332ArqComp-2024-A/Proyectos/CityWeather/CityTemperatureAnalysis.ipynb][CityTemperatureAnalysis.ipynb]], existen librerías alternativas que se
+pueden utilizar para presentar los resultados gráficos. En ambos
+casos, para que funcione los siguientes bloques de código, es
+necesario que realice la instalación de los paquetes usando ~mamba
+install <nombre-paquete>~
+** Muestra Aleatoria de datos
+Presentar una muestra de 10 valores aleatorios de los datos obtenidos.
+#+caption: Lectura de archivo CSV y muestra de 10 valores aleatorios
+#+begin_src python :session :results output :exports both
+import pandas as pd
+
+# Ruta al archivo CSV
+csv_file = '/home/santiago/LojaWeather/clima-loja-hoy.csv'
+
+# Cargar el DataFrame desde un archivo CSV
+df = pd.read_csv(csv_file)
+
+# Limpia las columnas eliminando las unidades si es necesario
+df['Temperature (°C)'] = df['Temperature (°C)'].str.replace(' °C', '', regex=False).astype(float)
+df['Humidity (%)'] = df['Humidity (%)'].str.replace(' %', '', regex=False).astype(float)
+
+# Convierte 'Timestamp' a datetime
+df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
+
+# Muestra una muestra aleatoria de 10 valores del DataFrame
+sample_df = df.sample(n=10, random_state=1)  # random_state para reproducibilidad
+
+# Imprime la muestra en formato de tabla
+print(sample_df)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+             Timestamp  Temperature (°C)  Humidity (%)       Description
+40 2024-08-11 16:35:00             24.67          35.0  Scattered clouds
+31 2024-08-11 15:50:01             24.67          35.0  Scattered clouds
+45 2024-08-11 17:00:01             24.67          35.0  Scattered clouds
+86 2024-08-11 20:05:01             13.03          94.0  Scattered clouds
+83 2024-08-11 19:50:02             13.03          94.0  Scattered clouds
+48 2024-08-11 17:15:01             23.67          37.0        Few clouds
+67 2024-08-11 18:45:02             21.67          41.0        Few clouds
+44 2024-08-11 16:55:00             24.67          35.0  Scattered clouds
+78 2024-08-11 19:45:01             13.03          94.0  Scattered clouds
+74 2024-08-11 19:29:58             13.62          90.0  Scattered clouds
+#+end_example
+
+Resultado del número de filas y columnas leídos del archivo csv
+#+begin_src python :session :results output exports both
+header = filtered_rows[0]
+data = filtered_rows[1:]
+print(len(header), len(data))
+#+end_src
+
+#+RESULTS:
+: 4 85
+
+** Gráfica Temperatura vs Tiempo
+Realizar una gráfica de la Temperatura en el tiempo.
+
+
+El siguiente cógido permite hacer la gráfica de la temperatura vs
+tiempo para Org 9.7+. Para saber que versión dispone puede ejecutar
+~M-x org-version~
+
+#+begin_src python :results file :exports both :session
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# Cargar el DataFrame desde un archivo CSV
+df = pd.read_csv('/home/santiago/LojaWeather/clima-loja-hoy.csv')
+
+# Limpia las columnas eliminando las unidades
+df['Temperature (°C)'] = df['Temperature (°C)'].str.replace(' °C', '', regex=False).astype(float)
+df['Humidity (%)'] = df['Humidity (%)'].str.replace(' %', '', regex=False).astype(float)
+
+# Convierte 'Timestamp' a datetime
+df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
+
+# Crear una copia del DataFrame para ETL
+df_etl = df.copy()
+
+# Define el tamaño de la figura de salida
+fig = plt.figure(figsize=(8, 6))
+
+# Dibuja las variables 'Timestamp' y 'Temperature (°C)'
+plt.plot(df_etl['Timestamp'], df_etl['Temperature (°C)'], marker='o', linestyle='-', color='b')
+
+# Ajuste para la presentación de fechas en la imagen
+plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=2))
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+
+# Configura la cuadrícula
+plt.grid()
+
+# Título que obtiene el nombre de la ciudad del DataFrame
+# Cambia 'Loja' por el nombre de la ciudad si está disponible en los datos
+plt.title(f'Temperatura Principal vs Tiempo en Loja')
+
+# Rotación de las etiquetas del eje X
+plt.xticks(rotation=40)
+
+# Ajuste del diseño para que no se corten las etiquetas
+fig.tight_layout()
+
+# Guardar la imagen en un archivo
+fname = '/home/santiago/LojaWeather/weather_site/public/images/temperature.png'
+plt.savefig(fname)
+
+# Mostrar la ubicación del archivo guardado
+fname
+#+end_src
+
+#+caption: Gráfica Temperatura vs Tiempo
+#+RESULTS:
+[[file:/home/santiago/LojaWeather/weather_site/public/images/temperature.png]]
+
+
+**  Realice una gráfica de Humedad con respecto al tiempo
+[[file:/home/santiago/LojaWeather/weather_site/public/images/temperatureHumedad.png]]
+
+**  *Opcional* Presente alguna gráfica de interés.
+
+* Referencias
+- [[https://emacs.stackexchange.com/questions/28715/get-pandas-data-frame-as-a-table-in-org-babel][presentar dataframe como tabla en emacs org]]
+- [[https://orgmode.org/worg/org-contrib/babel/languages/ob-doc-python.html][Python Source Code Blocks in Org Mode]]
+- [[https://systemcrafters.net/publishing-websites-with-org-mode/building-the-site/][Systems Crafters Construir tu sitio web con Modo Emacs Org]]
+- [[https://www.youtube.com/watch?v=AfkrzFodoNw][Vídeo Youtube Build Your Website with Org Mode]]
+* Footnotes
+
+[fn:1] Recuerde que su máquina ha de disponer de un entorno de
+anaconda/mamba denominado iccd332 en el cual se dispone del interprete
+de Python
